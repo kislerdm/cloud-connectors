@@ -4,6 +4,7 @@
 import pathlib
 import importlib.util
 from types import ModuleType
+import inspect
 import warnings
 
 
@@ -16,10 +17,10 @@ MODULE = "common"
 
 CLASSES = set(['Client'])
 
-CLASS_ATTS = set(["ls", "mv",
-                  "read", "store",
-                  "upload", "download",
-                  "delete_object", "delete_bucket"])
+CLASS_METHODS = set(["ls", "mv",
+                     "read", "store",
+                     "upload", "download",
+                     "delete_object", "delete_bucket"])
 
 
 def load_module(module_name: str) -> ModuleType:
@@ -38,7 +39,7 @@ def load_module(module_name: str) -> ModuleType:
     return module
 
 
-def test_module_exists():
+def test_module_exists() -> None:
     try:
         _ = load_module(MODULE)
     except Exception as ex:
@@ -52,4 +53,12 @@ module = load_module(MODULE)
 def test_module_miss_classes() -> None:
     missing = CLASSES.difference(set(module.__dir__()))
     assert not missing, f"""Class(es) '{"', '".join(missing)}' is(are) missing."""
+    return
+
+
+def test_class_client_miss_methods() -> None:
+    model_members = inspect.getmembers(module.Client)
+    missing = CLASS_METHODS.difference(
+        set([i[0] for i in model_members]))
+    assert not missing, f"""Class 'Client' Method(s) '{"', '".join(missing)}' is(are) missing."""
     return
