@@ -272,6 +272,7 @@ class Client(ClientCommon):
         
         Raises:
           PermissionError: Raised when a ListBuckets operation is not permitted.
+          ConnectionError: Raised when a connection to s3 occurred.
         """
         try:
             resp = self.client.list_buckets()
@@ -462,15 +463,53 @@ class Client(ClientCommon):
         
         Args:
           bucket: Bucket name.
-          path: Path to locate the object in bucket.
+          path: Path(s) to locate the object(s) in bucket.
+        
+        Raises:
+          PermissionError: Raised when
+            s3:deleteObject, s3:DeleteObjectVersion and s3:PutLifeCycleConfigurationis 
+            not permitted.
+          ConnectionError: Raised when a connection to s3 occurred.
         """
-        raise NotImplementedError()
+        try:
+            resp = self.client.delete_objects(Bucket=bucket,
+                                              Key=path)
+        except Exception as ex:
+            raise PermissionError(ex)
+        
+        if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
+            raise ConnectionError(f"HTTP code: {resp['HTTPStatusCode']}")
 
-    def delete_bucket(self,
-                      name: str) -> None:
-        """"Function to delete the bucket.
+        return
+    
+    def delete_objects(self,
+                       bucket: str,
+                       paths: List[str]) -> None:
+        """"Function to delete the object from a bucket.
         
         Args:
-          name: Bucket name.
+          bucket: Bucket name.
+          paths: Paths to locate the objects in bucket.
+        
+        Raises:
+          PermissionError: Raised when
+            s3:deleteObject, s3:DeleteObjectVersion and s3:PutLifeCycleConfigurationis 
+            not permitted.
+          ConnectionError: Raised when a connection to s3 occurred.
         """
-        raise NotImplementedError()
+        try:
+            resp = self.client.delete_objects(Bucket=bucket,
+                                              Delete={
+                                                      'Objects': [{"Key": v} for v in paths],
+                                                      'Quiet': True,
+                                              })
+        except Exception as ex:
+            raise PermissionError(ex)
+        
+        if resp['ResponseMetadata']['HTTPStatusCode'] != 200:
+            raise ConnectionError(f"HTTP code: {resp['HTTPStatusCode']}")
+
+        if "Errors" in resp:
+            raise Exception(resp['Errors'])
+        
+        return

@@ -121,13 +121,3 @@ class Client(ABC):
           path: Path to locate the object in bucket.
         """
         pass
-
-    @abstractmethod
-    def delete_bucket(self,
-                      name: str) -> None:
-        """"Function to delete the bucket.
-        
-        Args:
-          name: Bucket name.
-        """
-        pass
