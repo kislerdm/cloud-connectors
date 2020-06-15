@@ -2,7 +2,7 @@
 # www.dkisler.com
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Tuple
 
 
 class Client(ABC):
