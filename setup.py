@@ -2,18 +2,20 @@
 # www.dkisler.com
 
 import pathlib
+import importlib
+from types import ModuleType
 from setuptools import setup, find_namespace_packages
 
 
 DIR = pathlib.Path(__file__).parent
 requirements = (DIR / "requirements.txt").read_text()
 README = (DIR / "README.md").read_text()
-
+VERSION = (DIR / "VERSION").read_text()
 PKG_NAME = "cloud-connectors"
 
 setup(
     name=PKG_NAME,
-    version='1.0.0',
+    version=VERSION,
     description="Framework to abstract public cloud services.",
     long_description=README,
     long_description_content_type="text/markdown",
