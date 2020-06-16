@@ -6,7 +6,8 @@ import psycopg2.extras
 import fastjsonschema
 from collections import namedtuple
 from typing import List, Tuple, Any, NamedTuple
-import exceptions
+from cloud_connectors.cloud_storage.common import Client as ClientCommon
+import cloud_connectors.database.exceptions
 
 
 class Client:
