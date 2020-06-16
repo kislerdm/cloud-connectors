@@ -24,7 +24,7 @@ class Client(ClientCommon):
 
     Raises:
       ConnectionError: Raised when a connection error to s3 occurred.
-      ValueError: Raised when provided connection configuration is wrong.
+      cloud_connectors.cloud_storage.exceptions.ConfigurationError: Raised when provided connection configuration is wrong.
     """
     __slots__ = ["client"]
 
@@ -261,7 +261,7 @@ class Client(ClientCommon):
             err = Client._validator(Client.CLIENT_CONFIG_SCHEMA,
                                     configuration)
             if err:
-                raise ValueError(err)
+                raise exceptions.ConfigurationError(Exception(err))
         try:
             self.client = boto3.client('s3', **configuration)
         except Exception as ex:
@@ -425,7 +425,7 @@ class Client(ClientCommon):
         Raises:
           FileNotFoundError: Raised when file path_source not found.
           PermissionError: Raised when a s3:putObject, or write operation is not permitted.
-          ValueError: Raised when provided s3 transfer configuration is wrong.
+          cloud_connectors.cloud_storage.exceptions.ConfigurationError: Raised when provided s3 transfer configuration is wrong.
           cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
             Raised when the object not found.
         """
@@ -436,7 +436,7 @@ class Client(ClientCommon):
             err = Client._validator(Client.S3_TRANSFER_SCHEMA,
                                     configuration)
             if err:
-                raise ValueError(err)
+                raise exceptions.ConfigurationError(Exception(err))
 
         try:
             self.client.upload_file(Filename=path_source,
@@ -466,7 +466,8 @@ class Client(ClientCommon):
 
         Raises:
           PermissionError: Raised when a s3:putObject, or write operation is not permitted.
-          ValueError: Raised when provided s3 transfer configuration is wrong.
+          cloud_connectors.cloud_storage.exceptions.ConfigurationError: 
+            Raised when provided s3 transfer configuration is wrong.
           cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
             Raised when the object not found.
           cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
@@ -476,7 +477,7 @@ class Client(ClientCommon):
             err = Client._validator(Client.S3_TRANSFER_SCHEMA,
                                     configuration)
             if err:
-                raise ValueError(err)
+                raise exceptions.ConfigurationError(Exception(err))
 
         try:
             self.client.download_file(Filename=path_destination,
