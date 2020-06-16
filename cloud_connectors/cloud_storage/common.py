@@ -42,10 +42,12 @@ class Client(ABC):
     
     @abstractmethod
     def read(self,
+             bucket: str,
              path: str) -> bytes:
         """"Function to read the object from a bucket into memory.
         
         Args:
+          bucket: Bucket name.
           path: Path to locate the object in a bucket.
         """
         pass
@@ -53,12 +55,16 @@ class Client(ABC):
     @abstractmethod
     def store(self,
               obj: bytes,
-              path: str) -> None:
+              bucket: str,
+              path: str,
+              configuration: dict = {}) -> None:
         """"Function to store the object from memory into bucket.
         
         Args:
           obj: Data to store in a bucket.
           path: Path to store the object to.
+          bucket: Bucket name.
+          configuration: Extra configurations.
         """
         pass
 
@@ -95,6 +101,22 @@ class Client(ABC):
         pass
     
     @abstractmethod
+    def cp(self,
+           bucket_source: str,
+           bucket_destination: str,
+           path_source: str,
+           path_destination: str) -> None:
+        """"Function to copy the object from bucket to bucket.
+        
+        Args:
+          bucket_source: Bucket name source.
+          bucket_destination: Bucket name destination.
+          path_source: Initial path to locate the object in bucket.
+          path_destination: Final path to locate the object in bucket.
+        """
+        pass
+    
+    @abstractmethod
     def mv(self,
            bucket_source: str,
            bucket_destination: str,
@@ -120,4 +142,16 @@ class Client(ABC):
           bucket: Bucket name.
           path: Path to locate the object in bucket.
         """
+        pass
+    
+    @abstractmethod
+    def delete_objects(self,
+                       bucket: str,
+                       paths: List[str]) -> None:
+        """"Function to delete the objects from a bucket.
+
+        Args:
+          bucket: Bucket name.
+          paths: Paths to locate the objects in bucket.
+        """"
         pass
