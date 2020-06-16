@@ -2,8 +2,8 @@
 # www.dkisler.com
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
-
+from typing import List, Tuple, Union
+import fastjsonschema
 
 class Client(ABC):
     """Client abstract class to connect to a cloud storage service.
@@ -11,10 +11,20 @@ class Client(ABC):
     Args:
       configuration: Connection configuration.
     """
+    __slots__ = ["client"]
+    
+    @staticmethod
+    def _validator(schema: dict, obj: dict) -> Union[None, str]:
+        try:
+            _ = fastjsonschema.validate(schema, obj)
+        except fastjsonschema.JsonSchemaException as ex:
+            return ex
+        return
+      
     @abstractmethod
     def __init__(self, 
                  configuration: dict):
-        pass
+        self.client = None
 
     @abstractmethod
     def list_buckets(self) -> List[str]:

@@ -4,10 +4,9 @@
 import os
 import boto3
 from botocore.exceptions import ClientError
-from typing import Union, List, Tuple
+from typing import List, Tuple
 from cloud_connectors.cloud_storage.common import Client as ClientCommon
 import cloud_connectors.cloud_storage.exceptions
-import fastjsonschema
 
 
 class Client(ClientCommon):
@@ -17,17 +16,15 @@ class Client(ClientCommon):
       configuration (dict): Connection configuration.
 
         Dict structure with all options 
-          see details: 
+          See details: 
             https://github.com/boto/boto3/blob/master/boto3/session.py, method client
-          see config key: 
+          See config key: 
             https://botocore.amazonaws.com/v1/documentation/api/1.17.2/reference/config.html
 
     Raises:
       ConnectionError: Raised when a connection error to s3 occurred.
       cloud_connectors.cloud_storage.exceptions.ConfigurationError: Raised when provided connection configuration is wrong.
     """
-    __slots__ = ["client"]
-
     CLIENT_CONFIG_SCHEMA = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -247,14 +244,6 @@ class Client(ClientCommon):
             }
         }
     }
-
-    @staticmethod
-    def _validator(schema: dict, obj: dict) -> Union[None, str]:
-        try:
-            _ = fastjsonschema.validate(schema, obj)
-        except fastjsonschema.JsonSchemaException as ex:
-            return ex
-        return
 
     def __init__(self, configuration: dict = {}):
         if configuration:
