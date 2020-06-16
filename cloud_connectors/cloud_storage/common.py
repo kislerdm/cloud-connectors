@@ -17,7 +17,7 @@ class Client(ABC):
         pass
 
     @abstractmethod
-    def ls_buckets(self) -> List[str]:
+    def list_buckets(self) -> List[str]:
         """"Function to list buckets.
           
         Returns:
@@ -26,9 +26,9 @@ class Client(ABC):
         pass
     
     @abstractmethod
-    def ls_objects(self,
-                   bucket: str,
-                   prefix: str = None) -> List[Tuple[str, int]]:
+    def list_objects(self,
+                     bucket: str,
+                     prefix: str = None) -> List[Tuple[str, int]]:
         """"Function to list objects in a bucket.
         
         Args:
@@ -101,11 +101,11 @@ class Client(ABC):
         pass
     
     @abstractmethod
-    def cp(self,
-           bucket_source: str,
-           bucket_destination: str,
-           path_source: str,
-           path_destination: str) -> None:
+    def copy(self,
+             bucket_source: str,
+             bucket_destination: str,
+             path_source: str,
+             path_destination: str) -> None:
         """"Function to copy the object from bucket to bucket.
         
         Args:
@@ -117,11 +117,11 @@ class Client(ABC):
         pass
     
     @abstractmethod
-    def mv(self,
-           bucket_source: str,
-           bucket_destination: str,
-           path_source: str,
-           path_destination: str) -> None:
+    def move(self,
+             bucket_source: str,
+             bucket_destination: str,
+             path_source: str,
+             path_destination: str) -> None:
         """"Function to move/rename the object.
         
         Args:
@@ -148,10 +148,10 @@ class Client(ABC):
     def delete_objects(self,
                        bucket: str,
                        paths: List[str]) -> None:
-        """"Function to delete the objects from a bucket.
+        """Function to delete the objects from a bucket.
 
         Args:
           bucket: Bucket name.
           paths: Paths to locate the objects in bucket.
-        """"
+        """
         pass

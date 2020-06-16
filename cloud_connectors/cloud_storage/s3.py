@@ -5,8 +5,8 @@ import os
 import boto3
 from botocore.exceptions import ClientError
 from typing import Union, List, Tuple
-from common import Client as ClientCommon
-import exceptions
+from cloud_connectors.cloud_storage.common import Client as ClientCommon
+import cloud_connectors.cloud_storage.exceptions
 import fastjsonschema
 
 
@@ -267,7 +267,7 @@ class Client(ClientCommon):
         except Exception as ex:
             raise ConnectionError(ex)
 
-    def ls_buckets(self) -> List[str]:
+    def list_buckets(self) -> List[str]:
         """"Function to list buckets.
 
         Returns:
@@ -290,10 +290,10 @@ class Client(ClientCommon):
         else:
             return []
 
-    def ls_objects(self,
-                   bucket: str,
-                   prefix: str = '',
-                   max_objects: int = None) -> List[Tuple[str, int]]:
+    def list_objects(self,
+                     bucket: str,
+                     prefix: str = '',
+                     max_objects: int = None) -> List[Tuple[str, int]]:
         """"Function to list objects in a bucket with their size.
 
         Args:
@@ -495,12 +495,12 @@ class Client(ClientCommon):
 
         return
 
-    def cp(self,
-           bucket_source: str,
-           bucket_destination: str,
-           path_source: str,
-           path_destination: str = None,
-           configuration: dict = {}) -> None:
+    def copy(self,
+             bucket_source: str,
+             bucket_destination: str,
+             path_source: str,
+             path_destination: str = None,
+             configuration: dict = {}) -> None:
         """"Function to copy the object from bucket to bucket.
 
         Args:
@@ -558,12 +558,12 @@ class Client(ClientCommon):
 
         return
     
-    def mv(self,
-           bucket_source: str,
-           bucket_destination: str,
-           path_source: str,
-           path_destination: str = None,
-           configuration: dict = {}) -> None:
+    def move(self,
+             bucket_source: str,
+             bucket_destination: str,
+             path_source: str,
+             path_destination: str = None,
+             configuration: dict = {}) -> None:
         """"Function to move/rename the object.
 
         Args:
