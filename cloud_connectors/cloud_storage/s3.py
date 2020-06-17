@@ -313,7 +313,7 @@ class Client(ClientCommon):
 
         for page in pages:
             if 'Contents' in page:
-                output.extend([(obj['Key'], obj['Size'])
+                output.extend([(obj['Key'], int(obj['Size']))
                                for obj in page['Contents']])
 
         return output
