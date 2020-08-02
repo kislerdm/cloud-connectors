@@ -1,6 +1,8 @@
 # Dmitry Kisler © 2020-present
 # www.dkisler.com
 
+from typing import List, Tuple
+from fastjsonschema import validate, JsonSchemaException
 from google.cloud import storage
 from cloud_connectors.template.cloud_storage import Client as ClientCommon
 from cloud_connectors import exceptions
@@ -18,10 +20,11 @@ class Client(ClientCommon):
 
 
     Raises:
-      ConnectionError: Raised when a connection error to s3 occurred.
-      cloud_connectors.cloud_storage.exceptions.ConfigurationError:
-        Raised when provided connection configuration is wrong.
+      exceptions.ConfigurationError: Raised when provided connection configuration is wrong.
     """
+
+    # fmt: off
+    # pylint: disable=C0301
     CLIENT_CONFIG_SCHEMA = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -128,53 +131,43 @@ class Client(ClientCommon):
             }
         }
     }
+    # fmt: on
 
     def __init__(self, configuration: dict = None):
         if configuration:
-            err = Client._validator(Client.CLIENT_CONFIG_SCHEMA,
-                                    configuration)
-            if err:
-                raise exceptions.ConfigurationError(Exception(err))
+            try:
+                _ = validate(Client.CLIENT_CONFIG_SCHEMA, configuration)
+            except JsonSchemaException as ex:
+                raise exceptions.ConfigurationError(ex)
 
             if "credentials" in configuration:
                 if configuration['credentials']:
                     if "expiry" in configuration['credentials']:
                         configuration['credentials']['expiry'] = time.strptime(
-                            configuration['credentials']['expiry'])
+                            configuration['credentials']['expiry']
+                        )
                     configuration['credentials'] = google.auth.credentials.Credentials(
-                        **configuration['credentials'])
+                        **configuration['credentials']
+                    )
 
             if "client_info" in configuration:
                 if configuration['client_info']:
                     configuration['client_info'] = google.api_core.client_info.ClientInfo(
-                        **configuration['client_info'])
+                        **configuration['client_info']
+                    )
 
-        try:
-            self.client = storage.Client(**configuration) if configuration\
-                else storage.Client()
-        except Exception as ex:
-            raise ConnectionError(ex)
+        self.client = storage.Client(**configuration) if configuration else storage.Client()
 
     def list_buckets(self) -> List[str]:
-        """"Function to list buckets.
+        """Function to list buckets.
 
         Returns:
           List of buckets.
-
-        Raises:
-          PermissionError: Raised when a ListBuckets operation is not permitted.
-          ConnectionError: Raised when a connection error to gcs occurred.
         """
-        try:
-            return [bucket.id for bucket in list(self.client.list_buckets())]
-        except Exception as ex:
-            raise PermissionError(ex)
+        return [bucket.id for bucket in list(self.client.list_buckets())]
 
-    def list_objects(self,
-                     bucket: str,
-                     prefix: str = '',
-                     max_objects: int = None) -> List[Tuple[str, int]]:
-        """"Function to list objects in a bucket with their size.
+    def list_objects(self, bucket: str, prefix: str = "", max_objects: int = None) -> List[str]:
+        """Function to list objects in a bucket.
 
         Args:
           bucket: Bucket name.
@@ -182,137 +175,39 @@ class Client(ClientCommon):
           max_objects: Max number of keys to output.
 
         Returns:
-          List of tuples with object name and its size in bytes.
+          List of objects path in the bucket.
 
         Raises:
-          PermissionError: Raised when a storage.buckets.list operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound:
-            Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
-        try:
-            bucket_obj = self.client.lookup_bucket(bucket)
-            if not bucket_obj:
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
+        bucket_obj = self.client.lookup_bucket(bucket)
+        if not bucket_obj:
+            raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
 
-            return [(i.name, int(i._properties['size']))
-                    for i in bucket_obj.list_blobs(prefix=prefix,
-                                                   max_results=max_objects)]
+        return [i.name for i in bucket_obj.list_blobs(prefix=prefix, max_results=max_objects)]
 
-        except Exception as ex:
-            raise PermissionError(ex)
-
-    def read(self,
-             bucket: str,
-             path: str) -> bytes:
-        """"Function to read the object from a bucket into memory.
+    def list_objects_size(
+        self, bucket: str, prefix: str = "", max_objects: int = None
+    ) -> List[Tuple[str, int]]:
+        # pylint: disable=protected-access
+        """Function to list objects in a bucket with their size.
 
         Args:
           bucket: Bucket name.
-          path: Path to locate the object in a bucket.
+          prefix: Objects prefix to restrict the list of results.
+          max_objects: Max number of keys to output.
+
+        Returns:
+          List of tuples with objects path and size in bytes.
+
+        Raises:
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
-        pass
+        bucket_obj = self.client.lookup_bucket(bucket)
+        if not bucket_obj:
+            raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
 
-
-    def store(self,
-              obj: bytes,
-              bucket: str,
-              path: str,
-              configuration: dict = {}) -> None:
-        """"Function to store the object from memory into bucket.
-
-        Args:
-          obj: Data to store in a bucket.
-          path: Path to store the object to.
-          bucket: Bucket name.
-          configuration: Extra configurations.
-        """
-        pass
-
-
-    def upload(self,
-               bucket: str,
-               path_source: str,
-               path_destination: str = None,
-               configuration: dict = None) -> None:
-        """"Function to upload the object from disk into a bucket.
-
-        Args:
-          bucket: Bucket name.
-          path_source: Path to locate the object on fs.
-          path_destination: Path to store the object to.
-          configuration: Transfer config parameters.
-        """
-        pass
-
-
-    def download(self,
-                 bucket: str,
-                 path_source: str,
-                 path_destination: str,
-                 configuration: dict = None) -> None:
-        """"Function to download the object from a bucket onto disk.
-
-        Args:
-          bucket: Bucket name.
-          path_source: Path to locate the object in bucket.
-          path_destination: Fs path to store the object to.
-          configuration: Transfer config parameters.
-        """
-        pass
-
-
-    def copy(self,
-             bucket_source: str,
-             bucket_destination: str,
-             path_source: str,
-             path_destination: str) -> None:
-        """"Function to copy the object from bucket to bucket.
-
-        Args:
-          bucket_source: Bucket name source.
-          bucket_destination: Bucket name destination.
-          path_source: Initial path to locate the object in bucket.
-          path_destination: Final path to locate the object in bucket.
-        """
-        pass
-
-
-    def move(self,
-             bucket_source: str,
-             bucket_destination: str,
-             path_source: str,
-             path_destination: str) -> None:
-        """"Function to move/rename the object.
-
-        Args:
-          bucket_source: Bucket name source.
-          bucket_destination: Bucket name destination.
-          path_source: Initial path to locate the object in bucket.
-          path_destination: Final path to locate the object in bucket.
-        """
-        pass
-
-
-    def delete_object(self,
-                      bucket: str,
-                      path: str) -> None:
-        """"Function to delete the object from a bucket.
-
-        Args:
-          bucket: Bucket name.
-          path: Path to locate the object in bucket.
-        """
-        pass
-
-
-    def delete_objects(self,
-                       bucket: str,
-                       paths: List[str]) -> None:
-        """Function to delete the objects from a bucket.
-
-        Args:
-          bucket: Bucket name.
-          paths: Paths to locate the objects in bucket.
-        """
-        pass
+        return [
+            (i.name, int(i._properties['size']))
+            for i in bucket_obj.list_blobs(prefix=prefix, max_results=max_objects)
+        ]
