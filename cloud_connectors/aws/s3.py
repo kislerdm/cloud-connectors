@@ -2,11 +2,12 @@
 # www.dkisler.com
 
 import os
+from typing import List
 import boto3
-from botocore.exceptions import ClientError
-from typing import List, Tuple
-from cloud_connectors.cloud_storage.common import Client as ClientCommon
-import cloud_connectors.cloud_storage.exceptions
+import fastjsonschema
+from botocore.exceptions import ClientError, NoCredentialsError, ParamValidationError
+from cloud_connectors.template.cloud_storage import Client as ClientCommon
+from cloud_connectors import exceptions
 
 
 class Client(ClientCommon):
@@ -15,16 +16,19 @@ class Client(ClientCommon):
     Args:
       configuration (dict): Connection configuration.
 
-        Dict structure with all options 
-          See details: 
+        Dict structure with all options
+          See details:
             https://github.com/boto/boto3/blob/master/boto3/session.py, method client
-          See config key: 
+          See config key:
             https://botocore.amazonaws.com/v1/documentation/api/1.17.2/reference/config.html
 
     Raises:
-      ConnectionError: Raised when a connection error to s3 occurred.
-      cloud_connectors.cloud_storage.exceptions.ConfigurationError: Raised when provided connection configuration is wrong.
+      exceptions.ConnectionError: Raised when a connection error to s3 occurred.
+      exceptions.ConfigurationError: Raised when provided connection configuration is wrong.
     """
+
+    # fmt: off
+    # pylint: disable=C0301
     CLIENT_CONFIG_SCHEMA = {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -34,7 +38,33 @@ class Client(ClientCommon):
         "properties": {
             "region_name": {
                 "type": "string",
-                "description": "The name of the region associated with the client."
+                "description": "The name of the region associated with the client.",
+                "default": "eu-central-1",
+                "enum": [
+                    "us-east-1",
+                    "us-east-2",
+                    "us-west-1",
+                    "us-west-2",
+                    "ca-central-1",
+                    "eu-central-1",
+                    "eu-west-1",
+                    "eu-west-2",
+                    "eu-west-3",
+                    "eu-south-1",
+                    "eu-north-1",
+                    "me-south-1",
+                    "sa-east-1",
+                    "cn-north-1",
+                    "cn-northwest-1",
+                    "af-south-1",
+                    "ap-east-1",
+                    "ap-south-1",
+                    "ap-northeast-1",
+                    "ap-northeast-2",
+                    "ap-northeast-3",
+                    "ap-southeast-1",
+                    "ap-southeast-2",
+                ],
             },
             "api_version": {
                 "type": "string",
@@ -64,15 +94,21 @@ class Client(ClientCommon):
             },
             "aws_access_key_id": {
                 "type": "string",
-                "description": "The access key to use when creating the client."
+                "description": "The access key to use when creating the client.",
+                "pattern": "A[K|S]IA[A-Z0-9]{16}",
+                "minLength": 20,
+                "maxLength": 20,
             },
             "aws_secret_access_key": {
                 "type": "string",
-                "description": "The secret key to use when creating the client."
+                "description": "The secret key to use when creating the client.",
+                "pattern": r"[a-zA-Z0-9\+\-\=\*/\\\!\?\%\$\#\&\(\)\[\]]{40}",
+                "minLength": 40,
+                "maxLength": 40,
             },
             "aws_session_token": {
                 "type": "string",
-                "description": "The session token to use when creating the client."
+                "description": "AWS token, usually used with temp secrets when assuming AWS role.",
             },
             "config": {
                 "type": "object",
@@ -95,7 +131,7 @@ class Client(ClientCommon):
                     },
                     "user_agent_extra": {
                         "type": "string",
-                        "description": "The value to append to the current User-Agent header value.",
+                        "description": "The value to append to the current User-Agent header.",
                         "default": None
                     },
                     "connect_timeout": {
@@ -147,8 +183,8 @@ class Client(ClientCommon):
                         "properties": {
                             "use_accelerate_endpoint": {
                                 "type": "boolean",
-                                "description": """Refers to whether to use the S3 Accelerate endpoint. 
-                                If true, the client will use the S3 Accelerate endpoint. 
+                                "description": """Refers to whether to use the S3 Accelerate endpoint.
+                                If true, the client will use the S3 Accelerate endpoint.
                                 If the S3 Accelerate endpoint is being used then the addressing style will always be virtual."""
                             },
                             "payload_signing_enabled": {
@@ -241,49 +277,44 @@ class Client(ClientCommon):
                 "type": "boolean",
                 "description": "If True, threads will be used when performing S3 transfers.",
                 "default": True
-            }
-        }
+            },
+        },
     }
+    # fmt: on
 
-    def __init__(self, configuration: dict = {}):
+    def __init__(self, configuration: dict = None) -> None:
         if configuration:
-            err = Client._validator(Client.CLIENT_CONFIG_SCHEMA,
-                                    configuration)
-            if err:
-                raise exceptions.ConfigurationError(Exception(err))
-        try:
-            self.client = boto3.client('s3', **configuration)
-        except Exception as ex:
-            raise ConnectionError(ex)
+            try:
+                _ = fastjsonschema.validate(Client.CLIENT_CONFIG_SCHEMA, configuration)
+            except fastjsonschema.JsonSchemaException as ex:
+                raise exceptions.ConfigurationError(ex)
+        else:
+            configuration = {}
+
+        self.client = boto3.client("s3", **configuration)
 
     def list_buckets(self) -> List[str]:
-        """"Function to list buckets.
+        """Function to list buckets.
 
         Returns:
           List of buckets.
 
         Raises:
-          PermissionError: Raised when a ListBuckets operation is not permitted.
-          ConnectionError: Raised when a connection error to s3 occurred.
+          ConnectionError: Raised when connection cannot be established.
         """
         try:
             resp = self.client.list_buckets()
-        except Exception as ex:
-            raise PermissionError(ex)
-
-        if str(resp['ResponseMetadata']['HTTPStatusCode'])[0] != '2':
-            raise ConnectionError(f"HTTP code: {resp['ResponseMetadata']['HTTPStatusCode']}.")
-
-        if resp['Buckets']:
-            return [bucket['Name'] for bucket in resp['Buckets']]
-        else:
+            if resp["Buckets"]:
+                return [bucket["Name"] for bucket in resp["Buckets"]]
             return []
+        except ClientError as ex:
+            if ex.response["Error"]["Code"] == "InvalidAccessKeyId":
+                raise ConnectionError("Invalid access key")
 
-    def list_objects(self,
-                     bucket: str,
-                     prefix: str = '',
-                     max_objects: int = None) -> List[Tuple[str, int]]:
-        """"Function to list objects in a bucket with their size.
+    def list_objects(
+        self, bucket: str, prefix: str = "", max_objects: int = None
+    ) -> List[str]:
+        """Function to list objects in a bucket with their size.
 
         Args:
           bucket: Bucket name.
@@ -291,37 +322,32 @@ class Client(ClientCommon):
           max_objects: Max number of keys to output.
 
         Returns:
-          List of tuples with object name and its size in bytes.
+          List of objects in the bucket.
 
         Raises:
-          PermissionError: Raised when a ListBuckets operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
         output = []
         max_objects = max_objects if max_objects else 1000
 
-        try:
-            paginator = self.client.get_paginator('list_objects_v2')
-            pages = paginator.paginate(Bucket=bucket,
-                                       Prefix=prefix)
-        except Exception as ex:
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
+        paginator = self.client.get_paginator("list_objects_v2")
 
-        for page in pages:
-            if 'Contents' in page:
-                output.extend([(obj['Key'], int(obj['Size']))
-                               for obj in page['Contents']])
+        try:
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                if "Contents" in page:
+                    output.extend(
+                        [obj["Key"] for obj in page["Contents"]]
+                    )
+        except ParamValidationError as ex:
+            raise exceptions.BucketNotFound(ex)
+        except ClientError as ex:
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
 
         return output
 
-    def read(self,
-             bucket: str,
-             path: str) -> bytes:
-        """"Function to read the object from a bucket into memory.
+    def read(self, bucket: str, path: str) -> bytes:
+        """Function to read the object from a bucket into memory.
 
         Args:
           bucket: Bucket name.
@@ -331,34 +357,30 @@ class Client(ClientCommon):
           Bytes encoded object.
 
         Raises:
-          PermissionError: Raised when a s3:getObject, 
-            or read operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
-            Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          ConnectionError: Raised when connection error occured.
+          exceptions.ObjectNotFound: Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
         try:
-            obj = self.client.get_object(Bucket=bucket,
-                                         Key=path)
-            return obj['Body'].read()
+            obj = self.client.get_object(Bucket=bucket, Key=path)
+            return obj["Body"].read()
+        except ParamValidationError as ex:
+            raise exceptions.BucketNotFound(ex)
+        except NoCredentialsError: # pragma: no cover
+            raise ConnectionError("Cannot connect, no credentials provided")
         except Exception as ex:
-            if 'NoSuchKey' in str(ex):
+            if type(ex).__name__ == "NoSuchKey":
                 raise exceptions.ObjectNotFound(
-                    Exception(f"Object '{path}' not found in bucket '{bucket}'"))
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
-        
-        return
+                    f"Object '{path}' not found in bucket '{bucket}'"
+                )
+            if type(ex).__name__ in ["NoSuchBucket", "InvalidBucketName"]:
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found: {ex}")
+            raise Exception(ex) # pragma: no cover
 
-    def store(self,
-              obj: bytes,
-              bucket: str,
-              path: str,
-              configuration: dict = {}) -> None:
-        """Function to store the object from memory into bucket.
+    def write(
+        self, obj: bytes, bucket: str, path: str, configuration: dict = None
+    ) -> None:
+        """Function to write the object from memory into bucket.
 
         Args:
           obj: Object data to store in a bucket.
@@ -366,9 +388,7 @@ class Client(ClientCommon):
           path: Path to store the object to.
           configuration: Extra configurations.
             See: https://boto3.amazonaws.com/v1/documentation/api/1.14.3/reference/services/s3.html?highlight=s3%20client#S3.Client.put_object
-
             For example:
-
             *.json.gz file should be uploaded with the following configuration:
                 {
                     "ContentEncoding": "gzip",
@@ -376,75 +396,58 @@ class Client(ClientCommon):
                 }
 
         Raises:
-          PermissionError: Raised when a s3:putObject, 
-            or write operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          ConnectionError: Raised when connection error occured.
+          TypeError: Raised when provided attributes have wrong types.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
+        configuration = configuration if configuration else {}
         try:
-            resp = self.client.put_object(Body=obj,
-                                          Bucket=bucket,
-                                          Key=path,
-                                          **configuration)
+            self.client.put_object(Body=obj, Bucket=bucket, Key=path, **configuration)
+        except NoCredentialsError: # pragma: no cover
+            raise ConnectionError("Cannot connect, no credentials provided")
         except Exception as ex:
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
+            if type(ex).__name__ == "ParamValidationError":
+                raise TypeError("Provided function attributes have wrong type.")
+            raise Exception(ex) # pragma: no cover
 
-        if str(resp['ResponseMetadata']['HTTPStatusCode'])[0] != '2':
-            raise ConnectionError(f"HTTP code: {resp['ResponseMetadata']['HTTPStatusCode']}.")
-
-        return
-
-    def upload(self,
-               bucket: str,
-               path_source: str,
-               path_destination: str = None,
-               configuration: dict = None) -> None:
-        """"Function to upload the object from disk into a bucket.
+    def upload(
+        self, bucket: str, path_source: str, path_destination: str = None
+    ) -> None:
+        """Function to upload the object from disk into a bucket.
 
         Args:
           bucket: Bucket name.
           path_source: Path to locate the object on fs.
           path_destination: Path to store the object to.
-          configuration: Transfer config parameters.
-            See: https://boto3.amazonaws.com/v1/documentation/api/1.14.2/reference/customizations/s3.html#boto3.s3.transfer.TransferConfig
 
         Raises:
           FileNotFoundError: Raised when file path_source not found.
-          PermissionError: Raised when a s3:putObject, or write operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.ConfigurationError: Raised when provided s3 transfer configuration is wrong.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
         if not os.path.exists(path_source):
             raise FileNotFoundError(f"{path_source} not found")
 
-        if configuration:
-            err = Client._validator(Client.S3_TRANSFER_SCHEMA,
-                                    configuration)
-            if err:
-                raise exceptions.ConfigurationError(Exception(err))
-
         try:
-            self.client.upload_file(Filename=path_source,
-                                    Bucket=bucket,
-                                    Key=path_destination if path_destination else path_source,
-                                    Config=configuration)
+            self.client.upload_file(
+                Filename=path_source,
+                Bucket=bucket,
+                Key=path_destination if path_destination else path_source,
+            )
         except Exception as ex:
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
-        return
+            if type(ex).__name__ == "S3UploadFailedError":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
+            raise Exception(ex) # pragma: no cover
 
-    def download(self,
-                 bucket: str,
-                 path_source: str,
-                 path_destination: str,
-                 configuration: dict = None) -> None:
-        """"Function to download the object from a bucket onto disk.
+    def download(
+        self,
+        bucket: str,
+        path_source: str,
+        path_destination: str,
+        configuration: dict = None,
+    ) -> None:
+        """Function to download the object from a bucket to disk.
 
         Args:
           bucket: Bucket name.
@@ -454,43 +457,55 @@ class Client(ClientCommon):
             See: https://boto3.amazonaws.com/v1/documentation/api/1.14.2/reference/customizations/s3.html#boto3.s3.transfer.TransferConfig
 
         Raises:
-          PermissionError: Raised when a s3:putObject, or write operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.ConfigurationError: 
-            Raised when provided s3 transfer configuration is wrong.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
-            Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          exceptions.ObjectNotFound: Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
+          exceptions.DestinationPathError: Raised when cannot save object to provided location.
+          exceptions.DestinationPathPermissionsError: Raised when cannot save object to provided
+            location due to lack of permissons.
         """
         if configuration:
-            err = Client._validator(Client.S3_TRANSFER_SCHEMA,
-                                    configuration)
-            if err:
-                raise exceptions.ConfigurationError(Exception(err))
+            try:
+                _ = fastjsonschema.validate(Client.S3_TRANSFER_SCHEMA, configuration)
+            except fastjsonschema.JsonSchemaException as ex:
+                raise exceptions.ConfigurationError(ex)
+        else:
+            configuration = {k: v["default"]
+                for k, v in Client.S3_TRANSFER_SCHEMA["properties"].items()
+            }
 
         try:
-            self.client.download_file(Filename=path_destination,
-                                      Bucket=bucket,
-                                      Key=path_source,
-                                      Config=configuration)
-        except Exception as ex:
-            if 'NoSuchKey' in str(ex):
+            self.client.download_file(
+                Filename=path_destination,
+                Bucket=bucket,
+                Key=path_source,
+                Config=boto3.s3.transfer.TransferConfig(**configuration),
+            )
+        except (NotADirectoryError, FileNotFoundError):
+            raise exceptions.DestinationPathError(
+                f"Cannot download file to {path_destination}"
+            )
+        except PermissionError:
+            raise exceptions.DestinationPathPermissionsError(
+                f"Cannot download file to {path_destination}"
+            )
+        except ClientError as ex:
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
+            if ex.response["Error"]["Code"] == "404":
                 raise exceptions.ObjectNotFound(
-                    Exception(f"Object '{path_source}' not found in bucket '{bucket}'"))
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
+                    f"Object '{path_source}' not found in bucket '{bucket}'"
+                )
+            raise Exception(ex) # pragma: no cover
 
-        return
-
-    def copy(self,
-             bucket_source: str,
-             bucket_destination: str,
-             path_source: str,
-             path_destination: str = None,
-             configuration: dict = {}) -> None:
-        """"Function to copy the object from bucket to bucket.
+    def copy(
+        self,
+        bucket_source: str,
+        bucket_destination: str,
+        path_source: str,
+        path_destination: str = None,
+        configuration: dict = None,
+    ) -> None:
+        """Function to copy the object from bucket to bucket.
 
         Args:
           bucket_source: Bucket name source.
@@ -502,58 +517,52 @@ class Client(ClientCommon):
             See: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html?highlight=copy_object
 
         Raises:
-          PermissionError: Raised when actions s3:putObject, s3:deleteObject, s3:getObject
-           not permitted.
           ConnectionError: Raised when a connection error to s3 occurred.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound:
-            Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound:
-            Raised when the object not found.
+          exceptions.ObjectNotFound: Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
-        if (bucket_destination, path_destination) == \
-                (bucket_source, path_source):
-                configuration['MetadataDirective'] = "REPLACE"
+        configuration = configuration if configuration else {}
+        if (bucket_destination, path_destination) == (bucket_source, path_source):
+            configuration["MetadataDirective"] = "REPLACE"
+
         try:
-            obj = self.client.get_object(Bucket=bucket_source,
-                                         Key=path_source)
-        except Exception as ex:
-            if 'NoSuchKey' in str(ex):
+            obj = self.client.get_object(Bucket=bucket_source, Key=path_source)
+        except NoCredentialsError: # pragma: no cover
+            raise ConnectionError("Cannot connect, no credentials provided")
+        except ClientError as ex:
+            if type(ex).__name__ == "NoSuchKey":
                 raise exceptions.ObjectNotFound(
-                    Exception(f"Object '{path_source}' not found in bucket '{bucket_source}'"))
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket_source}' not found."))
-            raise PermissionError(ex)
+                    f"Object '{path_source}' not found in bucket '{bucket_source}'"
+                )
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket_source}' not found.")
+            raise Exception(ex) # pragma: no cover
 
-        configuration['ContentType'] = obj['ContentType']
+        configuration["ContentType"] = obj["ContentType"]
 
         try:
-            resp = self.client.copy_object(
+            self.client.copy_object(
                 Bucket=bucket_destination,
-                CopySource={
-                    'Bucket': bucket_source,
-                    'Key': path_source,
-                },
+                CopySource={"Bucket": bucket_source, "Key": path_source,},
                 Key=path_destination if path_destination else path_source,
-                **configuration)
-        except Exception as ex:
-            if 'NoSuchBucket' in str(ex):
+                **configuration,
+            )
+        except ClientError as ex:
+            if type(ex).__name__ == "NoSuchBucket":
                 raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket_destination}' not found."))
-            raise PermissionError(ex)
+                    f"Bucket '{bucket_destination}' not found."
+                )
+            raise Exception(ex) # pragma: no cover
 
-        if str(resp['ResponseMetadata']['HTTPStatusCode'])[0] != '2':
-            return ConnectionError(f"HTTP code: {resp['ResponseMetadata']['HTTPStatusCode']}.")
-
-        return
-    
-    def move(self,
-             bucket_source: str,
-             bucket_destination: str,
-             path_source: str,
-             path_destination: str = None,
-             configuration: dict = {}) -> None:
-        """"Function to move/rename the object.
+    def move(
+        self,
+        bucket_source: str,
+        bucket_destination: str,
+        path_source: str,
+        path_destination: str = None,
+        configuration: dict = None,
+    ) -> None:
+        """Function to move/rename the object.
 
         Args:
           bucket_source: Bucket name source.
@@ -564,96 +573,59 @@ class Client(ClientCommon):
             See: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/s3.html?highlight=copy_object#S3.Client.copy_object
 
         Raises:
-          PermissionError: Raised when actions s3:putObject, s3:deleteObject, s3:getObject
-           not permitted.
           ConnectionError: Raised when a connection error to s3 occurred.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
-            Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
-        """ 
-        self.cp(bucket_source=bucket_source,
-                bucket_destination=bucket_destination,
-                path_source=path_source,
-                path_destination=path_destination,
-                configuration=configuration)
-        
-        self.delete_object(bucket=bucket_source,
-                           path=path_source)
-        
-        return
+          exceptions.ObjectNotFound: Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
+        """
+        self.copy(
+            bucket_source=bucket_source,
+            bucket_destination=bucket_destination,
+            path_source=path_source,
+            path_destination=path_destination,
+            configuration=configuration if configuration else {},
+        )
 
-    def delete_object(self,
-                      bucket: str,
-                      path: str) -> None:
-        """"Function to delete the object from a bucket.
+        self.delete_object(bucket=bucket_source, path=path_source)
+
+    def delete_object(self, bucket: str, path: str) -> None:
+        """Function to delete the object from a bucket.
 
         Args:
           bucket: Bucket name.
           path: Path to locate the object in bucket.
 
         Raises:
-          PermissionError: Raised when
-            s3:deleteObject, s3:DeleteObjectVersion and s3:PutLifeCycleConfigurationis 
-            not permitted.
           ConnectionError: Raised when a connection error to s3 occurred.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
-            Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
-            Raised when the object not found.
+          exceptions.ObjectNotFound: Raised when the object not found.
+          exceptions.BucketNotFound: Raised when the bucket not found.
         """
         try:
-            resp = self.client.delete_object(Bucket=bucket,
-                                             Key=path)
+            self.client.delete_object(Bucket=bucket, Key=path)
         except Exception as ex:
-            if 'NoSuchKey' in str(ex):
-                raise exceptions.ObjectNotFound(
-                    Exception(f"Object '{path}' not found in bucket '{bucket}'"))
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
-        
-        if str(resp['ResponseMetadata']['HTTPStatusCode'])[0] != '2':
-            raise ConnectionError(f"HTTP code: {resp['ResponseMetadata']['HTTPStatusCode']}.")
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
+            raise Exception(ex) # pragma: no cover
 
-        return
-
-    def delete_objects(self,
-                       bucket: str,
-                       paths: List[str]) -> None:
-        """"Function to delete the objects from a bucket.
+    def delete_objects(self, bucket: str, paths: List[str]) -> None:
+        """Function to delete the objects from a bucket.
 
         Args:
           bucket: Bucket name.
           paths: Paths to locate the objects in bucket.
 
         Raises:
-          PermissionError: Raised when
-            s3:deleteObject, s3:DeleteObjectVersion and s3:PutLifeCycleConfigurationis 
-            not permitted.
           ConnectionError: Raised when a connection error to s3 occurred.
-          cloud_connectors.cloud_storage.exceptions.ObjectNotFound: 
+          cloud_connectors.cloud_storage.exceptions.ObjectNotFound:
             Raised when the object not found.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
+          cloud_connectors.cloud_storage.exceptions.BucketNotFound:
             Raised when the object not found.
         """
         try:
-            resp = self.client.delete_objects(Bucket=bucket,
-                                              Delete={
-                                                  'Objects': [{"Key": v} for v in paths],
-                                                  'Quiet': True,
-                                              })
+            self.client.delete_objects(
+                Bucket=bucket,
+                Delete={"Objects": [{"Key": v} for v in paths], "Quiet": True,},
+            )
         except Exception as ex:
-            if 'NoSuchBucket' in str(ex):
-                raise exceptions.BucketNotFound(
-                    Exception(f"Bucket '{bucket}' not found."))
-            raise PermissionError(ex)
-
-        if str(resp['ResponseMetadata']['HTTPStatusCode'])[0] != '2':
-            raise ConnectionError(f"HTTP code: {resp['ResponseMetadata']['HTTPStatusCode']}.")
-
-        if "Errors" in resp:
-            raise Exception(resp['Errors'])
-
-        return
+            if type(ex).__name__ == "NoSuchBucket":
+                raise exceptions.BucketNotFound(f"Bucket '{bucket}' not found.")
+            raise Exception(ex) # pragma: no cover

@@ -2,8 +2,6 @@
 # www.dkisler.com
 
 import pathlib
-import importlib
-from types import ModuleType
 from setuptools import setup, find_namespace_packages
 
 
@@ -30,8 +28,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    packages=find_namespace_packages(where='.',
-                                     exclude=('tests',)),
+    packages=find_namespace_packages(where='.', exclude=('tests',)),
     install_requires=requirements,
     include_package_data=True,
 )
