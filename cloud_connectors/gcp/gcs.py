@@ -1,15 +1,9 @@
 # Dmitry Kisler © 2020-present
 # www.dkisler.com
 
-import os
-from typing import Union, List, Tuple
-import time
 from google.cloud import storage
-from cloud_connectors.cloud_storage.common import Client as ClientCommon
-from cloud_connectors.cloud_storage import exceptions
-import fastjsonschema
-# from common import Client as ClientCommon
-# import exceptions
+from cloud_connectors.template.cloud_storage import Client as ClientCommon
+from cloud_connectors import exceptions
 
 
 class Client(ClientCommon):
@@ -18,14 +12,14 @@ class Client(ClientCommon):
     Args:
       configuration (dict): Connection configuration.
 
-        Dict structure with all options 
-          See details: 
-            https://googleapis.dev/python/storage/latest/client.html?highlight=list%20buckets#google.cloud.storage.client.Client 
-          
+        Dict structure with all options
+          See details:
+            https://googleapis.dev/python/storage/latest/client.html?highlight=list%20buckets#google.cloud.storage.client.Client
+
 
     Raises:
       ConnectionError: Raised when a connection error to s3 occurred.
-      cloud_connectors.cloud_storage.exceptions.ConfigurationError: 
+      cloud_connectors.cloud_storage.exceptions.ConfigurationError:
         Raised when provided connection configuration is wrong.
     """
     CLIENT_CONFIG_SCHEMA = {
@@ -111,21 +105,21 @@ class Client(ClientCommon):
                     },
                     "quota_project_id": {
                         "type": "string",
-                        "description": "A project name that a client’s quota belongs to.",  
+                        "description": "A project name that a client’s quota belongs to.",
                     },
                     "credentials_file": {
                         "type": "string",
-                        "description": "A path to a file storing credentials.",  
+                        "description": "A path to a file storing credentials.",
                     },
                     "scopes": {
                         "type": "array",
-                        "description": "OAuth access token override scopes.",  
+                        "description": "OAuth access token override scopes.",
                         "items": {
-                            "type": "string",    
+                            "type": "string",
                         },
                         "examples": [
                             [
-                                "https://www.googleapis.com/auth/devstorage.full_control", 
+                                "https://www.googleapis.com/auth/devstorage.full_control",
                                 "https://www.googleapis.com/auth/devstorage.read_only"
                             ]
                         ]
@@ -134,14 +128,14 @@ class Client(ClientCommon):
             }
         }
     }
-    
+
     def __init__(self, configuration: dict = None):
         if configuration:
             err = Client._validator(Client.CLIENT_CONFIG_SCHEMA,
                                     configuration)
             if err:
                 raise exceptions.ConfigurationError(Exception(err))
-        
+
             if "credentials" in configuration:
                 if configuration['credentials']:
                     if "expiry" in configuration['credentials']:
@@ -149,18 +143,18 @@ class Client(ClientCommon):
                             configuration['credentials']['expiry'])
                     configuration['credentials'] = google.auth.credentials.Credentials(
                         **configuration['credentials'])
-            
+
             if "client_info" in configuration:
                 if configuration['client_info']:
                     configuration['client_info'] = google.api_core.client_info.ClientInfo(
                         **configuration['client_info'])
-        
+
         try:
             self.client = storage.Client(**configuration) if configuration\
                 else storage.Client()
         except Exception as ex:
             raise ConnectionError(ex)
-        
+
     def list_buckets(self) -> List[str]:
         """"Function to list buckets.
 
@@ -175,7 +169,7 @@ class Client(ClientCommon):
             return [bucket.id for bucket in list(self.client.list_buckets())]
         except Exception as ex:
             raise PermissionError(ex)
-    
+
     def list_objects(self,
                      bucket: str,
                      prefix: str = '',
@@ -192,7 +186,7 @@ class Client(ClientCommon):
 
         Raises:
           PermissionError: Raised when a storage.buckets.list operation is not permitted.
-          cloud_connectors.cloud_storage.exceptions.BucketNotFound: 
+          cloud_connectors.cloud_storage.exceptions.BucketNotFound:
             Raised when the object not found.
         """
         try:
@@ -200,33 +194,33 @@ class Client(ClientCommon):
             if not bucket_obj:
                 raise exceptions.BucketNotFound(
                     Exception(f"Bucket '{bucket}' not found."))
-            
-            return [(i.name, int(i._properties['size'])) 
-                    for i in bucket_obj.list_blobs(prefix=prefix, 
+
+            return [(i.name, int(i._properties['size']))
+                    for i in bucket_obj.list_blobs(prefix=prefix,
                                                    max_results=max_objects)]
-            
+
         except Exception as ex:
             raise PermissionError(ex)
-    
+
     def read(self,
              bucket: str,
              path: str) -> bytes:
         """"Function to read the object from a bucket into memory.
-        
+
         Args:
           bucket: Bucket name.
           path: Path to locate the object in a bucket.
         """
         pass
-    
-    
+
+
     def store(self,
               obj: bytes,
               bucket: str,
               path: str,
               configuration: dict = {}) -> None:
         """"Function to store the object from memory into bucket.
-        
+
         Args:
           obj: Data to store in a bucket.
           path: Path to store the object to.
@@ -235,14 +229,14 @@ class Client(ClientCommon):
         """
         pass
 
-    
+
     def upload(self,
                bucket: str,
                path_source: str,
                path_destination: str = None,
                configuration: dict = None) -> None:
         """"Function to upload the object from disk into a bucket.
-        
+
         Args:
           bucket: Bucket name.
           path_source: Path to locate the object on fs.
@@ -251,14 +245,14 @@ class Client(ClientCommon):
         """
         pass
 
-    
+
     def download(self,
                  bucket: str,
                  path_source: str,
                  path_destination: str,
                  configuration: dict = None) -> None:
         """"Function to download the object from a bucket onto disk.
-        
+
         Args:
           bucket: Bucket name.
           path_source: Path to locate the object in bucket.
@@ -266,31 +260,15 @@ class Client(ClientCommon):
           configuration: Transfer config parameters.
         """
         pass
-    
-    
+
+
     def copy(self,
              bucket_source: str,
              bucket_destination: str,
              path_source: str,
              path_destination: str) -> None:
         """"Function to copy the object from bucket to bucket.
-        
-        Args:
-          bucket_source: Bucket name source.
-          bucket_destination: Bucket name destination.
-          path_source: Initial path to locate the object in bucket.
-          path_destination: Final path to locate the object in bucket.
-        """
-        pass
-    
-    
-    def move(self,
-             bucket_source: str,
-             bucket_destination: str,
-             path_source: str,
-             path_destination: str) -> None:
-        """"Function to move/rename the object.
-        
+
         Args:
           bucket_source: Bucket name source.
           bucket_destination: Bucket name destination.
@@ -299,19 +277,35 @@ class Client(ClientCommon):
         """
         pass
 
-    
+
+    def move(self,
+             bucket_source: str,
+             bucket_destination: str,
+             path_source: str,
+             path_destination: str) -> None:
+        """"Function to move/rename the object.
+
+        Args:
+          bucket_source: Bucket name source.
+          bucket_destination: Bucket name destination.
+          path_source: Initial path to locate the object in bucket.
+          path_destination: Final path to locate the object in bucket.
+        """
+        pass
+
+
     def delete_object(self,
                       bucket: str,
                       path: str) -> None:
         """"Function to delete the object from a bucket.
-        
+
         Args:
           bucket: Bucket name.
           path: Path to locate the object in bucket.
         """
         pass
-    
-    
+
+
     def delete_objects(self,
                        bucket: str,
                        paths: List[str]) -> None:
