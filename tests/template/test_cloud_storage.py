@@ -17,6 +17,7 @@ CLASSES = {"Client"}
 CLASS_METHODS = {
     "list_buckets",
     "list_objects",
+    "list_objects_size",
     "read",
     "write",
     "upload",

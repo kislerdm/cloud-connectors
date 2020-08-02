@@ -2,9 +2,9 @@
 # www.dkisler.com
 
 import os
-from typing import List
+from typing import List, Tuple
 import boto3
-import fastjsonschema
+from fastjsonschema import validate, JsonSchemaException
 from botocore.exceptions import ClientError, NoCredentialsError, ParamValidationError
 from cloud_connectors.template.cloud_storage import Client as ClientCommon
 from cloud_connectors import exceptions
@@ -285,8 +285,8 @@ class Client(ClientCommon):
     def __init__(self, configuration: dict = None) -> None:
         if configuration:
             try:
-                _ = fastjsonschema.validate(Client.CLIENT_CONFIG_SCHEMA, configuration)
-            except fastjsonschema.JsonSchemaException as ex:
+                _ = validate(Client.CLIENT_CONFIG_SCHEMA, configuration)
+            except JsonSchemaException as ex:
                 raise exceptions.ConfigurationError(ex)
         else:
             configuration = {}
@@ -314,6 +314,26 @@ class Client(ClientCommon):
     def list_objects(
         self, bucket: str, prefix: str = "", max_objects: int = None
     ) -> List[str]:
+        """Function to list objects in a bucket.
+
+        Args:
+          bucket: Bucket name.
+          prefix: Objects prefix to restrict the list of results.
+          max_objects: Max number of keys to output.
+
+        Returns:
+          List of objects path in the bucket.
+
+        Raises:
+          exceptions.BucketNotFound: Raised when the bucket not found.
+        """
+        return [obj["Key"] for obj in self._list_objects(
+            bucket=bucket, prefix=prefix, max_objects=max_objects
+        )]
+
+    def list_objects_size(
+        self, bucket: str, prefix: str = "", max_objects: int = None
+    ) -> List[Tuple[str, int]]:
         """Function to list objects in a bucket with their size.
 
         Args:
@@ -322,7 +342,27 @@ class Client(ClientCommon):
           max_objects: Max number of keys to output.
 
         Returns:
-          List of objects in the bucket.
+          List of tuples with objects path and size in bytes.
+
+        Raises:
+          exceptions.BucketNotFound: Raised when the bucket not found.
+        """
+        return [(obj["Key"], obj["Size"]) for obj in self._list_objects(
+            bucket=bucket, prefix=prefix, max_objects=max_objects
+        )]
+
+    def _list_objects(
+        self, bucket: str, prefix: str = "", max_objects: int = None
+    ) -> List[dict]:
+        """Function to list objects in a bucket with their size.
+
+        Args:
+          bucket: Bucket name.
+          prefix: Objects prefix to restrict the list of results.
+          max_objects: Max number of keys to output.
+
+        Returns:
+          List of objects attributes in the bucket.
 
         Raises:
           exceptions.BucketNotFound: Raised when the bucket not found.
@@ -335,9 +375,7 @@ class Client(ClientCommon):
         try:
             for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
                 if "Contents" in page:
-                    output.extend(
-                        [obj["Key"] for obj in page["Contents"]]
-                    )
+                    output.extend(page["Contents"])
         except ParamValidationError as ex:
             raise exceptions.BucketNotFound(ex)
         except ClientError as ex:
@@ -465,8 +503,8 @@ class Client(ClientCommon):
         """
         if configuration:
             try:
-                _ = fastjsonschema.validate(Client.S3_TRANSFER_SCHEMA, configuration)
-            except fastjsonschema.JsonSchemaException as ex:
+                _ = validate(Client.S3_TRANSFER_SCHEMA, configuration)
+            except JsonSchemaException as ex:
                 raise exceptions.ConfigurationError(ex)
         else:
             configuration = {k: v["default"]
