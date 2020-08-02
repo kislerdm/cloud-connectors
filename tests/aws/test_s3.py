@@ -21,6 +21,7 @@ CLASS_METHODS = {
     "S3_TRANSFER_SCHEMA",
     "list_buckets",
     "list_objects",
+    "list_objects_size",
     "read",
     "write",
     "upload",
@@ -140,11 +141,7 @@ def test_list_objects() -> None:
         {"success": False, "create": None, "want": [],},
         {"success": True, "create": None, "want": [],},
         {"success": True, "create": "test.json", "want": ["test.json"],},
-        {
-            "success": True,
-            "create": "test1.json",
-            "want": ["test.json", "test1.json"],
-        },
+        {"success": True, "create": "test1.json", "want": ["test.json", "test1.json"],},
         {"success": True, "create": "blah.json", "want": ["test.json", "test1.json"],},
     ]
 
@@ -156,13 +153,43 @@ def test_list_objects() -> None:
                 put_object(mock_client, test["create"])
             objects = client.list_objects(bucket=BUCKET, prefix="test")
             if objects != test["want"]:
-                LOGGER.error(
-                    f"Error listing objects. got: {objects}, want: {test['want']}"
-                )
+                LOGGER.error(f"Error listing objects. got: {objects}, want: {test['want']}")
                 sys.exit(1)
         else:
             try:
                 objects = client.list_objects(bucket=f"{BUCKET}_bar", prefix="test")
+            except Exception as ex:
+                if type(ex).__name__ != "BucketNotFound":
+                    LOGGER.error("Wrong error type to handle NoSuchBucket error")
+                    sys.exit(1)
+
+
+@mock_s3
+def test_list_objects_size() -> None:
+    mock_client = boto3.client("s3")
+    mock_client.create_bucket(Bucket=BUCKET)
+
+    tests = [
+        {"success": False, "create": None, "want": [],},
+        {"success": True, "create": None, "want": [],},
+        {"success": True, "create": "test.json", "want": [("test.json", 38)],},
+        {"success": True, "create": "test1.json", "want": [("test.json", 38), ("test1.json", 38)],},
+        {"success": True, "create": "blah.json", "want": [("test.json", 38), ("test1.json", 38)],},
+    ]
+
+    client = module.Client()
+
+    for test in tests:
+        if test["success"]:
+            if test["create"]:
+                put_object(mock_client, test["create"])
+            objects = client.list_objects_size(bucket=BUCKET, prefix="test")
+            if objects != test["want"]:
+                LOGGER.error(f"Error listing objects. got: {objects}, want: {test['want']}")
+                sys.exit(1)
+        else:
+            try:
+                objects = client.list_objects_size(bucket=f"{BUCKET}_bar", prefix="test")
             except Exception as ex:
                 if type(ex).__name__ != "BucketNotFound":
                     LOGGER.error("Wrong error type to handle NoSuchBucket error")
@@ -327,10 +354,7 @@ def test_download() -> None:
 
     try:
         client.download(
-            bucket=BUCKET,
-            path_source=path,
-            path_destination=path_os,
-            configuration={"a": 1}
+            bucket=BUCKET, path_source=path, path_destination=path_os, configuration={"a": 1}
         )
     except Exception as ex:
         if type(ex).__name__ != "ConfigurationError":

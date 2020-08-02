@@ -1,11 +1,11 @@
-# Dmitry Kisler © 2020-present
-# www.dkisler.com
 # pylint: disable=missing-function-docstring
 import sys
 import inspect
 import warnings
 import logging
-from cloud_connectors.template import cloud_storage as module
+from google.cloud import storage
+import mock
+from cloud_connectors.gcp import gcs as module
 
 
 logging.basicConfig(level=logging.ERROR, format="[line: %(lineno)s] %(message)s")
@@ -15,6 +15,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 CLASSES = {"Client"}
 
 CLASS_METHODS = {
+    "CLIENT_CONFIG_SCHEMA",
     "list_buckets",
     "list_objects",
     "list_objects_size",
@@ -48,7 +49,8 @@ module.Client.__abstractmethods__ = set()
 
 
 def test_init() -> None:
-    client = module.Client({})
-    if client.client != "client":
-        LOGGER.error("Init error")
+    try:
+        _ = module.Client()
+    except Exception as ex:
+        LOGGER.error(ex)
         sys.exit(1)

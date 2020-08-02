@@ -2,7 +2,7 @@
 # www.dkisler.com
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Tuple
 
 
 class Client(ABC):
@@ -36,6 +36,18 @@ class Client(ABC):
 
         Returns:
           List of objects in the bucket.
+        """
+
+    @abstractmethod
+    def list_objects_size(self, bucket: str, prefix: str = None) -> List[Tuple[str, int]]:
+        """Function to list objects in a bucket with their size.
+
+        Args:
+          bucket: Bucket name.
+          prefix: Objects prefix to restrict the list of results.
+
+        Returns:
+          List of tuples with objects path and size in bytes.
         """
 
     @abstractmethod
